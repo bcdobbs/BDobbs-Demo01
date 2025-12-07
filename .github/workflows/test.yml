@@ -1,0 +1,44 @@
+name: Run Tests
+
+# Run tests on every push and pull request
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Run Pester Tests
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Pester
+      shell: pwsh
+      run: |
+        Install-Module -Name Pester -Force -SkipPublisherCheck -MinimumVersion 5.0.0
+        Write-Host "Pester version installed:"
+        Get-Module -Name Pester -ListAvailable | Select-Object Name, Version
+    
+    - name: Run Pester Tests
+      shell: pwsh
+      run: |
+        Import-Module Pester -MinimumVersion 5.0.0 -Force
+        $config = New-PesterConfiguration
+        $config.Run.Path = "."
+        $config.Run.Exit = $true
+        $config.TestResult.Enabled = $true
+        $config.TestResult.OutputFormat = "NUnitXml"
+        $config.TestResult.OutputPath = "test-results.xml"
+        $config.Output.Verbosity = "Detailed"
+        Invoke-Pester -Configuration $config
+    
+    - name: Publish Test Results
+      uses: EnricoMi/publish-unit-test-result-action/windows@v2
+      if: always()
+      with:
+        files: test-results.xml
+        check_name: Pester Test Results
