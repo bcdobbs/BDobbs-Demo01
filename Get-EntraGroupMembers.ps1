@@ -12,11 +12,23 @@
 .PARAMETER GroupId
     The Object ID of the Entra group. Use this if you know the exact ID.
 
+.PARAMETER ExportToCsv
+    If specified, exports the results to a CSV file instead of displaying in the console.
+
+.PARAMETER CsvPath
+    The path where the CSV file should be saved. If not specified, saves to the current directory with a generated filename.
+
 .EXAMPLE
     .\Get-EntraGroupMembers.ps1 -GroupName "Marketing Team"
     
 .EXAMPLE
     .\Get-EntraGroupMembers.ps1 -GroupId "12345678-1234-1234-1234-123456789012"
+
+.EXAMPLE
+    .\Get-EntraGroupMembers.ps1 -GroupName "Marketing Team" -ExportToCsv
+
+.EXAMPLE
+    .\Get-EntraGroupMembers.ps1 -GroupName "Marketing Team" -ExportToCsv -CsvPath "C:\Reports\MarketingUsers.csv"
 
 #>
 
@@ -26,7 +38,13 @@ param(
     [string]$GroupName,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'ById')]
-    [string]$GroupId
+    [string]$GroupId,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$ExportToCsv,
+
+    [Parameter(Mandatory = $false)]
+    [string]$CsvPath
 )
 
 # Check if Microsoft.Graph module is installed
@@ -113,10 +131,31 @@ try {
         }
     }
 
-    # Display results
+    # Display or export results
     if ($users) {
         Write-Host "`nFound $($users.Count) user(s) in group '$($group.DisplayName)':" -ForegroundColor Green
-        $users | Format-Table -AutoSize
+        
+        if ($ExportToCsv) {
+            # Generate filename if not specified
+            if (-not $CsvPath) {
+                $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                $sanitizedGroupName = $group.DisplayName -replace '[\\/:*?"<>|]', '_'
+                $CsvPath = Join-Path -Path $PWD -ChildPath "EntraGroup_${sanitizedGroupName}_${timestamp}.csv"
+            }
+            
+            # Ensure directory exists
+            $directory = Split-Path -Path $CsvPath -Parent
+            if ($directory -and -not (Test-Path -Path $directory)) {
+                New-Item -Path $directory -ItemType Directory -Force | Out-Null
+            }
+            
+            # Export to CSV
+            $users | Export-Csv -Path $CsvPath -NoTypeInformation -Encoding UTF8
+            Write-Host "Results exported to: $CsvPath" -ForegroundColor Green
+        }
+        else {
+            $users | Format-Table -AutoSize
+        }
         
         # Return the users object
         return $users
