@@ -77,17 +77,39 @@ try {
     # Get group members
     Write-Host "Retrieving group members..." -ForegroundColor Cyan
     $members = Get-MgGroupMember -GroupId $groupObjectId -All
+    
+    Write-Host "Total members found: $($members.Count)" -ForegroundColor Cyan
+    
+    # Debug: Show member types
+    $memberTypes = $members | Group-Object -Property '@odata.type' | Select-Object Name, Count
+    if ($memberTypes) {
+        Write-Host "Member types in group:" -ForegroundColor Cyan
+        $memberTypes | ForEach-Object { Write-Host "  $($_.Name): $($_.Count)" -ForegroundColor Gray }
+    }
 
     # Filter for users only and get detailed information
-    $users = $members | Where-Object { $_.'@odata.type' -eq '#microsoft.graph.user' } | ForEach-Object {
-        $user = Get-MgUser -UserId $_.Id -Property Id, DisplayName, UserPrincipalName, Mail, JobTitle, Department
-        [PSCustomObject]@{
-            DisplayName       = $user.DisplayName
-            UserPrincipalName = $user.UserPrincipalName
-            Email             = $user.Mail
-            JobTitle          = $user.JobTitle
-            Department        = $user.Department
-            UserId            = $user.Id
+    $userMembers = $members | Where-Object { 
+        $_.AdditionalProperties['@odata.type'] -eq '#microsoft.graph.user' -or
+        $_.GetType().Name -eq 'MicrosoftGraphUser' -or
+        -not $_.AdditionalProperties.ContainsKey('@odata.type')
+    }
+    
+    Write-Host "Processing $($userMembers.Count) user member(s)..." -ForegroundColor Cyan
+    
+    $users = $userMembers | ForEach-Object {
+        try {
+            $user = Get-MgUser -UserId $_.Id -Property Id, DisplayName, UserPrincipalName, Mail, JobTitle, Department -ErrorAction Stop
+            [PSCustomObject]@{
+                DisplayName       = $user.DisplayName
+                UserPrincipalName = $user.UserPrincipalName
+                Email             = $user.Mail
+                JobTitle          = $user.JobTitle
+                Department        = $user.Department
+                UserId            = $user.Id
+            }
+        }
+        catch {
+            Write-Warning "Could not retrieve details for member ID: $($_.Id)"
         }
     }
 
